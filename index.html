@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GovTech Talent Scout - CFG</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen font-sans">
+
+  <header class="border-b border-slate-800 bg-slate-950 p-6">
+    <div class="max-w-7xl mx-auto flex justify-between items-center">
+      <h1 class="text-2xl font-bold tracking-tight text-white">GovTech Talent Scout <span class="text-blue-500 text-sm font-medium px-2 py-1 bg-blue-950 rounded-md ml-2 border border-blue-800">CFG Sales Edition</span></h1>
+      <button onclick="loadGovLeads()" class="bg-blue-600 hover:bg-blue-500 text-white font-medium px-5 py-2 rounded-lg transition-colors text-sm">Scan Live Government Feeds</button>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto p-6">
+    <div class="flex gap-4 border-b border-slate-800 mb-6">
+      <button onclick="switchTab('tenders')" id="tab-tenders" class="border-b-2 border-blue-500 text-white pb-3 font-semibold text-lg transition-all px-2">Live Tenders (Pre-Award)</button>
+      <button onclick="switchTab('wins')" id="tab-wins" class="border-b-2 border-transparent text-slate-400 hover:text-slate-200 pb-3 font-semibold text-lg transition-all px-2">Contract Wins (Post-Award)</button>
+    </div>
+
+    <div id="loading" class="text-center py-12 text-slate-400 font-medium">Click "Scan Live Government Feeds" to begin searching...</div>
+    
+    <div id="table-container" class="hidden bg-slate-950 rounded-xl border border-slate-800 overflow-hidden shadow-xl">
+      <table class="w-full text-left border-collapse">
+        <thead class="bg-slate-900 text-slate-300 border-b border-slate-800 text-xs font-semibold uppercase tracking-wider">
+          <tr id="table-headers"></tr>
+        </thead>
+        <tbody id="table-body" class="divide-y divide-slate-800 text-sm text-slate-300"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <div id="side-drawer" class="fixed top-0 right-0 h-full w-full max-w-lg bg-slate-950 border-l border-slate-800 shadow-2xl p-6 transform translate-x-full transition-transform duration-300 overflow-y-auto z-50">
+    <div class="flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
+      <h2 class="text-xl font-bold text-white">Sales Intel Briefing</h2>
+      <button onclick="closeDrawer()" class="text-slate-400 hover:text-white font-bold text-lg">✕</button>
+    </div>
+    <div id="drawer-content" class="space-y-6"></div>
+  </div>
+
+  <script>
+    let rawLeadsData = { liveTenders: [], contractWins: [] };
+    let currentActiveTab = 'tenders';
+
+    async function loadGovLeads() {
+      const loader = document.getElementById('loading');
+      const container = document.getElementById('table-container');
+      loader.innerText = "Querying UK Cabinet Office Data Registry... Please wait...";
+      loader.classList.remove('hidden');
+      container.classList.add('hidden');
+
+      try {
+        const res = await fetch('/api/scout');
+        rawLeadsData = await res.json();
+        loader.classList.add('hidden');
+        container.classList.remove('hidden');
+        renderDashboardTable();
+      } catch (err) {
+        loader.innerText = "Error fetching procurement data. Ensure Vercel functions are fully deployed.";
+      }
+    }
+
+    // Backup rendering trigger for static deployment fallback
+    if (rawLeadsData.liveTenders.length === 0 && window.location.hostname.includes('localhost') === false) {
+       setTimeout(() => {
+         const loader = document.getElementById('loading');
+         loader.innerText = "System ready. Hit 'Scan Live Government Feeds' to execute server search bypass.";
+       }, 500);
+    }
+
+    function switchTab(targetTab) {
+      currentActiveTab = targetTab;
+      document.getElementById('tab-tenders').className = targetTab === 'tenders' ? "border-b-2 border-blue-500 text-white pb-3 font-semibold text-lg px-2" : "border-b-2 border-transparent text-slate-400 hover:text-slate-200 pb-3 font-semibold text-lg px-2";
+      document.getElementById('tab-wins').className = targetTab === 'wins' ? "border-b-2 border-blue-500 text-white pb-3 font-semibold text-lg px-2" : "border-b-2 border-transparent text-slate-400 hover:text-slate-200 pb-3 font-semibold text-lg px-2";
+      renderDashboardTable();
+    }
+
+    function renderDashboardTable() {
+      const headers = document.getElementById('table-headers');
+      const body = document.getElementById('table-body');
+      body.innerHTML = "";
+
+      if (currentActiveTab === 'tenders') {
+        headers.innerHTML = `<th class="p-4">Buyer Dept</th><th class="p-4">Project Scope</th><th class="p-4">Value</th><th class="p-4">CFG Track</th><th class="p-4">Closing</th>`;
+        if(!rawLeadsData.liveTenders || rawLeadsData.liveTenders.length === 0) {
+           body.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-slate-500">No active notices found in current window page frame.</td></tr>`;
+           return;
+        }
+        rawLeadsData.liveTenders.forEach((item, index) => {
+          body.innerHTML += `<tr onclick="openDrawer('tenders', ${index})" class="hover:bg-slate-900 cursor-pointer transition-colors border-b border-slate-800/50">
+            <td class="p-4 font-semibold text-white">${item.buyer}</td>
+            <td class="p-4 max-w-xs truncate">${item.title}</td>
+            <td class="p-4 text-emerald-400 font-medium">${item.value}</td>
+            <td class="p-4"><span class="px-2.5 py-1 rounded-full text-xs font-medium bg-blue-950 text-blue-400 border border-blue-900">${item.pathway}</span></td>
+            <td class="p-4 text-slate-400">${item.closingDate}</td>
+          </tr>`;
+        });
+      } else {
+        headers.innerHTML = `<th class="p-4">Buyer Dept</th><th class="p-4">Project Title</th><th class="p-4">Value</th><th class="p-4">Winning Supplier(s)</th><th class="p-4">Award Date</th>`;
+        if(!rawLeadsData.contractWins || rawLeadsData.contractWins.length === 0) {
+           body.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-slate-500">No active awards found in current window page frame.</td></tr>`;
+           return;
+        }
+        rawLeadsData.contractWins.forEach((item, index) => {
+          const supplierDisplay = item.suppliers.length > 1 ? `${item.suppliers[0]} <span class="text-xs text-blue-400 font-medium bg-blue-950 border border-blue-900 px-1.5 py-0.5 rounded ml-1">+${item.suppliers.length - 1}</span>` : item.suppliers[0] || "Assigned Contractor";
+          body.innerHTML += `<tr onclick="openDrawer('wins', ${index})" class="hover:bg-slate-900 cursor-pointer transition-colors border-b border-slate-800/50">
+            <td class="p-4 font-semibold text-white">${item.buyer}</td>
+            <td class="p-4 max-w-xs truncate">${item.title}</td>
+            <td class="p-4 text-emerald-400 font-medium">${item.value}</td>
+            <td class="p-4 text-slate-200">${supplierDisplay}</td>
+            <td class="p-4 text-slate-400">${item.awardDate}</td>
+          </tr>`;
+        });
+      }
+    }
+
+    function openDrawer(type, index) {
+      const item = type === 'tenders' ? rawLeadsData.liveTenders[index] : rawLeadsData.contractWins[index];
+      const drawer = document.getElementById('side-drawer');
+      const content = document.getElementById('drawer-content');
+      
+      let targetEntitiesHtml = "";
+      let strategyPitch = "";
+
+      if (type === 'tenders') {
+        targetEntitiesHtml = `<h4 class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-2">Likely Target Bidders to Partner With</h4><div class="text-sm font-medium text-blue-400">Kainos, BJSS, Capita, Sopra Steria, Netcompany, Softcat</div>`;
+        strategyPitch = `Offer an integrated pre-award Social Value package. Pitch how inserting a commitment to onboard Code First Girls graduates directly into their final proposal will maximize their evaluation scores under the mandatory UK PPN 06/20 guidelines.`;
+      } else {
+        targetEntitiesHtml = `<h4 class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-2">Winning Supplier Contact Details</h4>`;
+        item.suppliers.forEach((sup, i) => {
+          const contact = item.contacts[i] || { name: "Resource Management Team", email: "Check Corporate Domain" };
+          targetEntitiesHtml += `<div class="bg-slate-900 p-3 rounded-lg border border-slate-800 mb-2">
+            <div class="font-bold text-white mb-1">${sup}</div>
+            <div class="text-xs text-slate-400">Contact: ${contact.name}</div>
+            <div class="text-xs text-blue-400 select-all">${contact.email}</div>
+          </div>`;
+        });
+        strategyPitch = `This contractor faces immediate execution headcount shortages. Pitch our immediate deployment pipeline of job-ready ${item.pathway} graduates to mitigate their project risk and instantly satisfy contract diversity expectations.`;
+      }
+
+      content.innerHTML = `
+        <div>
+          <h3 class="text-lg font-bold text-white mb-1">${item.title}</h3>
+          <p class="text-xs text-slate-400">Client: ${item.buyer} | Value: <span class="text-emerald-400 font-medium">${item.value}</span></p>
+        </div>
+        <div class="bg-slate-900/60 border border-slate-800 rounded-lg p-4 text-xs max-h-40 overflow-y-auto text-slate-400 leading-relaxed">${item.description}</div>
+        <div>
+          <h4 class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">CFG Graduate Pathway Match</h4>
+          <span class="px-3 py-1 rounded-full text-xs font-semibold bg-blue-950 text-blue-400 border border-blue-900">${item.pathway}</span>
+        </div>
+        <div>${targetEntitiesHtml}</div>
+        <div class="border-t border-slate-800 pt-4">
+          <h4 class="text-xs uppercase tracking-wider text-blue-400 font-bold mb-1">Strategic Sales Angle</h4>
+          <p class="text-sm text-slate-300 leading-relaxed">${strategyPitch}</p>
+        </div>
+        <div class="pt-2 text-center">
+          <span class="text-xs text-slate-500">💡 Target relevant Bid Managers or Delivery Directors on LinkedIn</span>
+        </div>
+      `;
+      drawer.classList.remove('translate-x-full');
+    }
+
+    function closeDrawer() {
+      document.getElementById('side-drawer').classList.add('translate-x-full');
+    }
+  </script>
+</body>
+</html>
