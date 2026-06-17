@@ -16,16 +16,18 @@
   </header>
 
   <main class="max-w-7xl mx-auto p-6">
+    <!-- Active Pipeline Navigation Toggles -->
     <div class="flex gap-4 border-b border-slate-800 mb-6">
       <button onclick="switchTab('tenders')" id="tab-tenders" class="border-b-2 border-blue-500 text-white pb-3 font-semibold text-lg transition-all px-2">Live Tenders (Pre-Award)</button>
       <button onclick="switchTab('wins')" id="tab-wins" class="border-b-2 border-transparent text-slate-400 hover:text-slate-200 pb-3 font-semibold text-lg transition-all px-2">Contract Wins (Post-Award)</button>
     </div>
 
+    <!-- Data Tables Panel -->
     <div id="loading" class="text-center py-12 text-slate-400 font-medium">Click "Scan Live Government Feeds" to begin searching...</div>
     
     <div id="table-container" class="hidden bg-slate-950 rounded-xl border border-slate-800 overflow-hidden shadow-xl">
       <table class="w-full text-left border-collapse">
-        <thead class="bg-slate-900 text-slate-300 border-b border-slate-800 text-xs font-semibold uppercase tracking-wider">
+        <thead class="bg-slate-900 text-slate-300 border-b border-slate-800 text-xs font-semibold uppercase tracking-wider select-none">
           <tr id="table-headers"></tr>
         </thead>
         <tbody id="table-body" class="divide-y divide-slate-800 text-sm text-slate-300"></tbody>
@@ -33,6 +35,7 @@
     </div>
   </main>
 
+  <!-- Sales Intel Briefing Side panel -->
   <div id="side-drawer" class="fixed top-0 right-0 h-full w-full max-w-lg bg-slate-950 border-l border-slate-800 shadow-2xl p-6 transform translate-x-full transition-transform duration-300 overflow-y-auto z-50">
     <div class="flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
       <h2 class="text-xl font-bold text-white">Sales Intel Briefing</h2>
@@ -44,6 +47,17 @@
   <script>
     let rawLeadsData = { liveTenders: [], contractWins: [] };
     let currentActiveTab = 'tenders';
+    
+    // Tracks current sorting toggles: true = Ascending, false = Descending
+    let sortDirections = {
+      buyer: true,
+      title: true,
+      value: true,
+      pathway: true,
+      closingDate: true,
+      suppliers: true,
+      awardDate: true
+    };
 
     async function loadGovLeads() {
       const loader = document.getElementById('loading');
@@ -63,8 +77,7 @@
       }
     }
 
-    // Backup rendering trigger for static deployment fallback
-    if (rawLeadsData.liveTenders.length === 0 && window.location.hostname.includes('localhost') === false) {
+    if (rawLeadsData.liveTenders.length === 0 && !window.location.hostname.includes('localhost')) {
        setTimeout(() => {
          const loader = document.getElementById('loading');
          loader.innerText = "System ready. Hit 'Scan Live Government Feeds' to execute server search bypass.";
@@ -78,15 +91,59 @@
       renderDashboardTable();
     }
 
+    // Interactive Sorting Engine Logic
+    function sortColumn(field) {
+      const isAscending = sortDirections[field];
+      sortDirections[field] = !isAscending; 
+      
+      const targetDataset = currentActiveTab === 'tenders' ? rawLeadsData.liveTenders : rawLeadsData.contractWins;
+
+      targetDataset.sort((a, b) => {
+        let valA = a[field];
+        let valB = b[field];
+
+        // Format and clean Currency cells for proper numeric evaluation math
+        if (field === 'value') {
+          valA = parseInt(String(valA).replace(/[£,]/g, '')) || 0;
+          valB = parseInt(String(valB).replace(/[£,]/g, '')) || 0;
+        }
+        // Extract primary string value for sorting multi-supplier array lots
+        if (field === 'suppliers') {
+          valA = a.suppliers[0] || '';
+          valB = b.suppliers[0] || '';
+        }
+        // Format UK Date format strings into timestamps for chronological sorting
+        if (field === 'closingDate' || field === 'awardDate') {
+          const partsA = String(valA).split('/');
+          const partsB = String(valB).split('/');
+          valA = partsA.length === 3 ? new Date(partsA[2], partsA[1] - 1, partsA[0]).getTime() : 0;
+          valB = partsB.length === 3 ? new Date(partsB[2], partsB[1] - 1, partsB[0]).getTime() : 0;
+        }
+
+        if (valA < valB) return isAscending ? -1 : 1;
+        if (valA > valB) return isAscending ? 1 : -1;
+        return 0;
+      });
+
+      renderDashboardTable();
+    }
+
     function renderDashboardTable() {
       const headers = document.getElementById('table-headers');
       const body = document.getElementById('table-body');
       body.innerHTML = "";
 
+      // Render headers with interactive sorting button clicks
       if (currentActiveTab === 'tenders') {
-        headers.innerHTML = `<th class="p-4">Buyer Dept</th><th class="p-4">Project Scope</th><th class="p-4">Value</th><th class="p-4">CFG Track</th><th class="p-4">Closing</th>`;
+        headers.innerHTML = `
+          <th onclick="sortColumn('buyer')" class="p-4 cursor-pointer hover:bg-slate-800 transition-colors">Buyer Dept ↕</th>
+          <th onclick="sortColumn('title')" class="p-4 cursor-pointer hover:bg-slate-800 transition-colors">Project Scope ↕</th>
+          <th onclick="sortColumn('value')" class="p-4 cursor-pointer hover:bg-slate-800 transition-colors">Value ↕</th>
+          <th onclick="sortColumn('pathway')" class="p-4 cursor-pointer hover:bg-slate-800 transition-colors">CFG Track ↕</th>
+          <th onclick="sortColumn('closingDate')" class="p-4 cursor-pointer hover:bg-slate-800 transition-colors">Closing ↕</th>`;
+        
         if(!rawLeadsData.liveTenders || rawLeadsData.liveTenders.length === 0) {
-           body.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-slate-500">No active notices found in current window page frame.</td></tr>`;
+           body.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-slate-500">No active tech opportunities above £150k found in this page block feed.</td></tr>`;
            return;
         }
         rawLeadsData.liveTenders.forEach((item, index) => {
@@ -99,9 +156,15 @@
           </tr>`;
         });
       } else {
-        headers.innerHTML = `<th class="p-4">Buyer Dept</th><th class="p-4">Project Title</th><th class="p-4">Value</th><th class="p-4">Winning Supplier(s)</th><th class="p-4">Award Date</th>`;
+        headers.innerHTML = `
+          <th onclick="sortColumn('buyer')" class="p-4 cursor-pointer hover:bg-slate-800 transition-colors">Buyer Dept ↕</th>
+          <th onclick="sortColumn('title')" class="p-4 cursor-pointer hover:bg-slate-800 transition-colors">Project Title ↕</th>
+          <th onclick="sortColumn('value')" class="p-4 cursor-pointer hover:bg-slate-800 transition-colors">Value ↕</th>
+          <th onclick="sortColumn('suppliers')" class="p-4 cursor-pointer hover:bg-slate-800 transition-colors">Winning Supplier(s) ↕</th>
+          <th onclick="sortColumn('awardDate')" class="p-4 cursor-pointer hover:bg-slate-800 transition-colors">Award Date ↕</th>`;
+        
         if(!rawLeadsData.contractWins || rawLeadsData.contractWins.length === 0) {
-           body.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-slate-500">No active awards found in current window page frame.</td></tr>`;
+           body.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-slate-500">No active tech awards above £150k found in this page block feed.</td></tr>`;
            return;
         }
         rawLeadsData.contractWins.forEach((item, index) => {
