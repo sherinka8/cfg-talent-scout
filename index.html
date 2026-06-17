@@ -16,13 +16,11 @@
   </header>
 
   <main class="max-w-7xl mx-auto p-6">
-    <!-- Active Pipeline Navigation Toggles -->
     <div class="flex gap-4 border-b border-slate-800 mb-6">
       <button onclick="switchTab('tenders')" id="tab-tenders" class="border-b-2 border-blue-500 text-white pb-3 font-semibold text-lg transition-all px-2">Live Tenders (Pre-Award)</button>
       <button onclick="switchTab('wins')" id="tab-wins" class="border-b-2 border-transparent text-slate-400 hover:text-slate-200 pb-3 font-semibold text-lg transition-all px-2">Contract Wins (Post-Award)</button>
     </div>
 
-    <!-- Data Tables Panel -->
     <div id="loading" class="text-center py-12 text-slate-400 font-medium">Click "Scan Live Government Feeds" to begin searching...</div>
     
     <div id="table-container" class="hidden bg-slate-950 rounded-xl border border-slate-800 overflow-hidden shadow-xl">
@@ -35,7 +33,6 @@
     </div>
   </main>
 
-  <!-- Sales Intel Briefing Side panel -->
   <div id="side-drawer" class="fixed top-0 right-0 h-full w-full max-w-lg bg-slate-950 border-l border-slate-800 shadow-2xl p-6 transform translate-x-full transition-transform duration-300 overflow-y-auto z-50">
     <div class="flex justify-between items-center mb-6 border-b border-slate-800 pb-4">
       <h2 class="text-xl font-bold text-white">Sales Intel Briefing</h2>
@@ -48,7 +45,6 @@
     let rawLeadsData = { liveTenders: [], contractWins: [] };
     let currentActiveTab = 'tenders';
     
-    // Sort directions monitor toggle: true = Ascending, false = Descending
     let sortDirections = {
       buyer: true,
       title: true,
@@ -91,7 +87,6 @@
       renderDashboardTable();
     }
 
-    // Dynamic Column Sorting Engine Handler Function
     function sortColumn(field) {
       const isAscending = sortDirections[field];
       sortDirections[field] = !isAscending; 
@@ -100,8 +95,6 @@
       targetDataset.sort((a, b) => {
         let valA = a[field];
         let valB = b[field];
-        
-        // Strip string parameters out of monetary metrics for accurate sorting math
         if (field === 'value') {
           valA = parseInt(String(valA).replace(/[£,]/g, '')) || 0;
           valB = parseInt(String(valB).replace(/[£,]/g, '')) || 0;
@@ -110,7 +103,6 @@
           valA = a.suppliers[0] || '';
           valB = b.suppliers[0] || '';
         }
-        // Transform UK Date String layout formats into comparable numeric timestamps
         if (field === 'closingDate' || field === 'awardDate') {
           const partsA = String(valA).split('/');
           const partsB = String(valB).split('/');
@@ -138,7 +130,7 @@
           <th onclick="sortColumn('closingDate')" class="p-4 cursor-pointer hover:bg-slate-800 transition-colors">Closing ↕</th>`;
         
         if(!rawLeadsData.liveTenders || rawLeadsData.liveTenders.length === 0) {
-           body.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-slate-500">No active 2025/2026 tech notices above £150k found in this dataset page.</td></tr>`;
+           body.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-slate-500">No active 2025/2026 tech notices above £150k found.</td></tr>`;
            return;
         }
         rawLeadsData.liveTenders.forEach((item, index) => {
@@ -159,7 +151,7 @@
           <th onclick="sortColumn('awardDate')" class="p-4 cursor-pointer hover:bg-slate-800 transition-colors">Award Date ↕</th>`;
         
         if(!rawLeadsData.contractWins || rawLeadsData.contractWins.length === 0) {
-           body.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-slate-500">No active 2025/2026 tech awards above £150k found in this dataset page.</td></tr>`;
+           body.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-slate-500">No active 2025/2026 tech awards above £150k found.</td></tr>`;
            return;
         }
         rawLeadsData.contractWins.forEach((item, index) => {
@@ -183,8 +175,8 @@
       let targetEntitiesHtml = "";
       let strategyPitch = "";
       
-      // Compute direct link string using the mapped notice tracking reference ID code
-      const verificationUrl = `https://www.contractsfinder.service.gov.uk/Notice/${item.id}`;
+      // FIX: Route the verification portal link directly onto the open public Find a Tender Service registry
+      const ftsVerificationUrl = `https://www.find-tender.service.gov.uk/Notice/${item.id}`;
 
       if (type === 'tenders') {
         targetEntitiesHtml = `<h4 class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-2">Likely Target Bidders to Partner With</h4><div class="text-sm font-medium text-blue-400">Kainos, BJSS, Capita, Sopra Steria, Netcompany, Softcat</div>`;
@@ -203,14 +195,14 @@
       }
 
       content.innerHTML = `
-        <!-- Direct Live Portal Verification Link Section -->
-        <div class="bg-blue-950/40 border border-blue-900 rounded-lg p-3 flex justify-between items-center mb-4">
+        <!-- Public Find a Tender Link Section (Account Registration Not Required) -->
+        <div class="bg-emerald-950/40 border border-emerald-900 rounded-lg p-3 flex justify-between items-center mb-4">
           <div>
-            <div class="text-xs font-bold text-blue-400 uppercase tracking-wide">Government Notice Identity Verified</div>
-            <div class="text-[11px] text-slate-400 truncate max-w-[240px]">ID Reference: ${item.id}</div>
+            <div class="text-xs font-bold text-emerald-400 uppercase tracking-wide">Public Notice Verified</div>
+            <div class="text-[11px] text-slate-400 truncate max-w-[220px]">FTS Reference: ${item.id}</div>
           </div>
-          <a href="${verificationUrl}" target="_blank" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded transition-colors flex items-center gap-1">
-            Verify on Gov.uk ↗
+          <a href="${ftsVerificationUrl}" target="_blank" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3 py-1.5 rounded transition-colors flex items-center gap-1 shadow-md">
+            Open Find a Tender ↗
           </a>
         </div>
 
