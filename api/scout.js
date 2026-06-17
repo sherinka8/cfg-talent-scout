@@ -1,33 +1,22 @@
-// api/scout.js - Master Filtering, Date Targeting, and Direct Reference Link Engine
+// api/scout.js - Enhanced Public Find a Tender ID Mapping Integration
 export default async function handler(req, res) {
-  // Official UK Government API endpoint for searching Open Contracting Data Standard notices
-  const GOV_API_URL = "https://www.contractsfinder.service.gov.uk/Published/Notices/OCDS/Search";
+  const startDate = "2025-01-01T00:00:00";
+  const endDate = new Date().toISOString().split('T')[0] + "T23:59:59"; // Current date in 2026
+
+  const GOV_API_URL = `https://www.contractsfinder.service.gov.uk/Published/Notices/OCDS/Search?publishedFrom=${startDate}&publishedTo=${endDate}&limit=100`;
   
-  // 📅 BOUNDARY LOCK: Set boundaries targeting exclusively 2025 and 2026 pipelines
-  const startDate = new Date("2025-01-01T00:00:00Z");
-  const endDate = new Date(); // Captures up to the current date in 2026
-
-  const formatDateForGov = (dateObj) => dateObj.toISOString().split('T')[0] + "T00:00:00";
-
   const searchPayload = {
-    cpvCodes: ["72000000"], // Broad IT, Software, Systems and Data Consulting Category
-    publishedFrom: formatDateForGov(startDate), 
-    publishedTo: formatDateForGov(endDate),
-    pageSize: 100, // Pulls a massive block payload to ensure filtration returns a robust dashboard
-    page: 1
+    cpvCodes: ["72000000"] // IT Services, Software Development, Systems and Data Consulting
   };
 
-  // 💷 MINIMUM CONTRACT VALUE: Discard administrative noise under £150k
   const MINIMUM_VALUE_THRESHOLD = 150000;
 
-  // ❌ TEXT EXCLUSION LIST: Drops common umbrella keyword clutter instantly
   const CRAP_EXCLUSION_KEYWORDS = [
     "eyecare", "eye care", "voucher", "optician", "benefits platform", "cycle to work", 
     "catering", "canteen", "security guard", "cleaning", "uniform", "furniture", 
     "occupational health", "medical check", "gym membership", "translation", "courier"
   ];
 
-  // 🎯 CORE TECH KEYWORDS: The contract text must mention at least one core engineering deliverable
   const CORE_TECH_KEYWORDS = [
     "software", "developer", "engineer", "data", "cloud", "migration", "application", 
     "react", "javascript", "python", "sql", "aws", "azure", "devops", "cyber", 
@@ -58,26 +47,25 @@ export default async function handler(req, res) {
       const title = tender.title || "Digital Transformation Project";
       const description = tender.description || "";
       
-      // Grab notice identity hash needed to frame external URLs
-      const noticeId = release.id || release.ocid || "";
+      // CRITICAL LINK RE-MAP: Extract the raw unique notice identifier suffix hash
+      // Open contracting IDs look like: ocds-b5fd17-034852-2026. We need to isolate the end reference.
+      let rawOcid = release.ocid || "";
+      let publicLinkHash = rawOcid.replace("ocds-b5fd17-", ""); 
       
+      if (!publicLinkHash && release.id) {
+         publicLinkHash = release.id;
+      }
+
       const numericValue = tender.value?.amount || 0;
       const valueDisplay = numericValue > 0 ? `£${numericValue.toLocaleString()}` : "Value inside Document logs";
       
       const fullTextLower = `${title} ${description}`.toLowerCase();
 
-      // FILTER 1: Financial Threshold Check (Skip small-value updates)
+      // Application Filtration Guardrails
       if (numericValue > 0 && numericValue < MINIMUM_VALUE_THRESHOLD) return;
+      if (CRAP_EXCLUSION_KEYWORDS.some(word => fullTextLower.includes(word))) return; 
+      if (!CORE_TECH_KEYWORDS.some(word => fullTextLower.includes(word))) return; 
 
-      // FILTER 2: Text Exclusion Check (Skip explicit voucher/canteen junk)
-      const containsCrap = CRAP_EXCLUSION_KEYWORDS.some(word => fullTextLower.includes(word));
-      if (containsCrap) return; 
-
-      // FILTER 3: Engineering Match Check
-      const isRealTechContract = CORE_TECH_KEYWORDS.some(word => fullTextLower.includes(word));
-      if (!isRealTechContract) return; 
-
-      // If it passes all validation criteria, sort into Code First Girls track paths
       let pathway = "Software Engineering";
       if (fullTextLower.includes("python") || fullTextLower.includes("sql") || fullTextLower.includes("data")) {
         pathway = "Data Engineering";
@@ -92,7 +80,7 @@ export default async function handler(req, res) {
 
       if (release.tag?.includes("tender") || awards.length === 0) {
         liveTenders.push({
-          id: noticeId,
+          id: publicLinkHash,
           buyer,
           title,
           description,
@@ -118,7 +106,7 @@ export default async function handler(req, res) {
         });
 
         contractWins.push({
-          id: noticeId,
+          id: publicLinkHash,
           buyer,
           title,
           description,
