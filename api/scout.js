@@ -1,15 +1,23 @@
-// api/scout.js - High-Value Core Tech Filtered Vercel Serverless Function
+// api/scout.js - Master Filtering, Date Targeting, and Direct Reference Link Engine
 export default async function handler(req, res) {
-  // Official UK Government API endpoint for open OCDS datasets
+  // Official UK Government API endpoint for searching Open Contracting Data Standard notices
   const GOV_API_URL = "https://www.contractsfinder.service.gov.uk/Published/Notices/OCDS/Search";
   
+  // 📅 BOUNDARY LOCK: Set boundaries targeting exclusively 2025 and 2026 pipelines
+  const startDate = new Date("2025-01-01T00:00:00Z");
+  const endDate = new Date(); // Captures up to the current date in 2026
+
+  const formatDateForGov = (dateObj) => dateObj.toISOString().split('T')[0] + "T00:00:00";
+
   const searchPayload = {
-    cpvCodes: ["72000000"], // Broad IT & Digital Systems Category
-    pageSize: 80, // High page size count to filter out garbage records safely
+    cpvCodes: ["72000000"], // Broad IT, Software, Systems and Data Consulting Category
+    publishedFrom: formatDateForGov(startDate), 
+    publishedTo: formatDateForGov(endDate),
+    pageSize: 100, // Pulls a massive block payload to ensure filtration returns a robust dashboard
     page: 1
   };
 
-  // 💷 MINIMUM CONTRACT VALUE: Set to £150,000 to drop small administrative contracts instantly
+  // 💷 MINIMUM CONTRACT VALUE: Discard administrative noise under £150k
   const MINIMUM_VALUE_THRESHOLD = 150000;
 
   // ❌ TEXT EXCLUSION LIST: Drops common umbrella keyword clutter instantly
@@ -50,24 +58,26 @@ export default async function handler(req, res) {
       const title = tender.title || "Digital Transformation Project";
       const description = tender.description || "";
       
-      // Extract numeric value from payload data
+      // Grab notice identity hash needed to frame external URLs
+      const noticeId = release.id || release.ocid || "";
+      
       const numericValue = tender.value?.amount || 0;
       const valueDisplay = numericValue > 0 ? `£${numericValue.toLocaleString()}` : "Value inside Document logs";
       
       const fullTextLower = `${title} ${description}`.toLowerCase();
 
-      // FILTER 1: Financial Threshold Check (Skip everything under £150k)
+      // FILTER 1: Financial Threshold Check (Skip small-value updates)
       if (numericValue > 0 && numericValue < MINIMUM_VALUE_THRESHOLD) return;
 
       // FILTER 2: Text Exclusion Check (Skip explicit voucher/canteen junk)
       const containsCrap = CRAP_EXCLUSION_KEYWORDS.some(word => fullTextLower.includes(word));
       if (containsCrap) return; 
 
-      // FILTER 3: Core Engineering Match Check
+      // FILTER 3: Engineering Match Check
       const isRealTechContract = CORE_TECH_KEYWORDS.some(word => fullTextLower.includes(word));
       if (!isRealTechContract) return; 
 
-      // If it passes all 3 validation filters, classify into Code First Girls paths
+      // If it passes all validation criteria, sort into Code First Girls track paths
       let pathway = "Software Engineering";
       if (fullTextLower.includes("python") || fullTextLower.includes("sql") || fullTextLower.includes("data")) {
         pathway = "Data Engineering";
@@ -82,7 +92,7 @@ export default async function handler(req, res) {
 
       if (release.tag?.includes("tender") || awards.length === 0) {
         liveTenders.push({
-          id: release.ocid,
+          id: noticeId,
           buyer,
           title,
           description,
@@ -108,7 +118,7 @@ export default async function handler(req, res) {
         });
 
         contractWins.push({
-          id: release.ocid,
+          id: noticeId,
           buyer,
           title,
           description,
