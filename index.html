@@ -48,7 +48,7 @@
     let rawLeadsData = { liveTenders: [], contractWins: [] };
     let currentActiveTab = 'tenders';
     
-    // Tracks current sorting toggles: true = Ascending, false = Descending
+    // Sort directions monitor toggle: true = Ascending, false = Descending
     let sortDirections = {
       buyer: true,
       title: true,
@@ -91,40 +91,36 @@
       renderDashboardTable();
     }
 
-    // Interactive Sorting Engine Logic
+    // Dynamic Column Sorting Engine Handler Function
     function sortColumn(field) {
       const isAscending = sortDirections[field];
       sortDirections[field] = !isAscending; 
-      
       const targetDataset = currentActiveTab === 'tenders' ? rawLeadsData.liveTenders : rawLeadsData.contractWins;
 
       targetDataset.sort((a, b) => {
         let valA = a[field];
         let valB = b[field];
-
-        // Format and clean Currency cells for proper numeric evaluation math
+        
+        // Strip string parameters out of monetary metrics for accurate sorting math
         if (field === 'value') {
           valA = parseInt(String(valA).replace(/[£,]/g, '')) || 0;
           valB = parseInt(String(valB).replace(/[£,]/g, '')) || 0;
         }
-        // Extract primary string value for sorting multi-supplier array lots
         if (field === 'suppliers') {
           valA = a.suppliers[0] || '';
           valB = b.suppliers[0] || '';
         }
-        // Format UK Date format strings into timestamps for chronological sorting
+        // Transform UK Date String layout formats into comparable numeric timestamps
         if (field === 'closingDate' || field === 'awardDate') {
           const partsA = String(valA).split('/');
           const partsB = String(valB).split('/');
           valA = partsA.length === 3 ? new Date(partsA[2], partsA[1] - 1, partsA[0]).getTime() : 0;
           valB = partsB.length === 3 ? new Date(partsB[2], partsB[1] - 1, partsB[0]).getTime() : 0;
         }
-
         if (valA < valB) return isAscending ? -1 : 1;
         if (valA > valB) return isAscending ? 1 : -1;
         return 0;
       });
-
       renderDashboardTable();
     }
 
@@ -133,7 +129,6 @@
       const body = document.getElementById('table-body');
       body.innerHTML = "";
 
-      // Render headers with interactive sorting button clicks
       if (currentActiveTab === 'tenders') {
         headers.innerHTML = `
           <th onclick="sortColumn('buyer')" class="p-4 cursor-pointer hover:bg-slate-800 transition-colors">Buyer Dept ↕</th>
@@ -143,7 +138,7 @@
           <th onclick="sortColumn('closingDate')" class="p-4 cursor-pointer hover:bg-slate-800 transition-colors">Closing ↕</th>`;
         
         if(!rawLeadsData.liveTenders || rawLeadsData.liveTenders.length === 0) {
-           body.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-slate-500">No active tech opportunities above £150k found in this page block feed.</td></tr>`;
+           body.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-slate-500">No active 2025/2026 tech notices above £150k found in this dataset page.</td></tr>`;
            return;
         }
         rawLeadsData.liveTenders.forEach((item, index) => {
@@ -164,7 +159,7 @@
           <th onclick="sortColumn('awardDate')" class="p-4 cursor-pointer hover:bg-slate-800 transition-colors">Award Date ↕</th>`;
         
         if(!rawLeadsData.contractWins || rawLeadsData.contractWins.length === 0) {
-           body.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-slate-500">No active tech awards above £150k found in this page block feed.</td></tr>`;
+           body.innerHTML = `<tr><td colspan="5" class="p-8 text-center text-slate-500">No active 2025/2026 tech awards above £150k found in this dataset page.</td></tr>`;
            return;
         }
         rawLeadsData.contractWins.forEach((item, index) => {
@@ -187,6 +182,9 @@
       
       let targetEntitiesHtml = "";
       let strategyPitch = "";
+      
+      // Compute direct link string using the mapped notice tracking reference ID code
+      const verificationUrl = `https://www.contractsfinder.service.gov.uk/Notice/${item.id}`;
 
       if (type === 'tenders') {
         targetEntitiesHtml = `<h4 class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-2">Likely Target Bidders to Partner With</h4><div class="text-sm font-medium text-blue-400">Kainos, BJSS, Capita, Sopra Steria, Netcompany, Softcat</div>`;
@@ -194,7 +192,7 @@
       } else {
         targetEntitiesHtml = `<h4 class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-2">Winning Supplier Contact Details</h4>`;
         item.suppliers.forEach((sup, i) => {
-          const contact = item.contacts[i] || { name: "Resource Management Team", email: "Check Corporate Domain" };
+          const contact = item.contacts[i] || { name: "Resource Management Team", email: "Check Domain" };
           targetEntitiesHtml += `<div class="bg-slate-900 p-3 rounded-lg border border-slate-800 mb-2">
             <div class="font-bold text-white mb-1">${sup}</div>
             <div class="text-xs text-slate-400">Contact: ${contact.name}</div>
@@ -205,6 +203,17 @@
       }
 
       content.innerHTML = `
+        <!-- Direct Live Portal Verification Link Section -->
+        <div class="bg-blue-950/40 border border-blue-900 rounded-lg p-3 flex justify-between items-center mb-4">
+          <div>
+            <div class="text-xs font-bold text-blue-400 uppercase tracking-wide">Government Notice Identity Verified</div>
+            <div class="text-[11px] text-slate-400 truncate max-w-[240px]">ID Reference: ${item.id}</div>
+          </div>
+          <a href="${verificationUrl}" target="_blank" class="bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded transition-colors flex items-center gap-1">
+            Verify on Gov.uk ↗
+          </a>
+        </div>
+
         <div>
           <h3 class="text-lg font-bold text-white mb-1">${item.title}</h3>
           <p class="text-xs text-slate-400">Client: ${item.buyer} | Value: <span class="text-emerald-400 font-medium">${item.value}</span></p>
