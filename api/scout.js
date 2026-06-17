@@ -1,13 +1,16 @@
-// api/scout.js - Master Timeline Sourcing & Query Link Encoder
+// api/scout.js - Consolidated 2025 & 2026 High-Value Tech Sourcing Engine
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
 
-  // Request a bulk chunk directly from the core pipeline
   const cacheBuster = Date.now();
-  const GOV_API_URL = `https://www.contractsfinder.service.gov.uk/Published/Notices/OCDS/Search?limit=100&stages=tender,award&cb=${cacheBuster}`;
-
   const MINIMUM_VALUE_THRESHOLD = 150000;
+
+  // Exact target year boundaries required
+  const targetRanges = [
+    { from: "2025-01-01T00:00:00", to: "2025-12-31T23:59:59" }, // Complete 2025 Pipeline
+    { from: "2026-01-01T00:00:00", to: new Date().toISOString().split('T')[0] + "T23:59:59" } // 2026 To Date
+  ];
 
   const CRAP_EXCLUSION_KEYWORDS = [
     "eyecare", "eye care", "voucher", "optician", "benefits platform", "cycle to work", 
@@ -21,36 +24,46 @@ export default async function handler(req, res) {
     "scrum", "agile", "product manager", "qa", "testing", "automation", "full-stack"
   ];
 
+  let rawReleasesCombined = [];
+
   try {
-    const apiResponse = await fetch(GOV_API_URL, {
-      method: 'GET',
-      headers: { 'Accept': 'application/json' }
-    });
+    // Loop through both timelines independently to force the Gov database to yield both stacks
+    for (const range of targetRanges) {
+      const fetchUrl = `https://www.contractsfinder.service.gov.uk/Published/Notices/OCDS/Search?publishedFrom=${range.from}&publishedTo=${range.to}&limit=100&stages=tender,award&cb=${cacheBuster}`;
+      
+      const apiResponse = await fetch(fetchUrl, {
+        method: 'POST', // Government index demands POST schema for payload maps
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cpvCodes: ["72000000"] }) // IT Category lock
+      });
 
-    if (!apiResponse.ok) throw new Error(`Registry connection error`);
-
-    const data = await apiResponse.json();
-    const releases = data.releases || [];
+      if (apiResponse.ok) {
+        const payloadData = await apiResponse.json();
+        if (payloadData.releases) {
+          rawReleasesCombined = rawReleasesCombined.concat(payloadData.releases);
+        }
+      }
+    }
 
     let liveTenders = [];
     let contractWins = [];
 
-    releases.forEach((release) => {
+    rawReleasesCombined.forEach((release) => {
       const tender = release.tender || {};
       const awards = release.awards || [];
       const buyer = release.buyer?.name || "UK Government Department";
       const title = tender.title || "Digital Transformation Project";
       const description = tender.description || "";
       
-      // Extract numeric date cleanly to map year tracks accurately
-      const rawDate = release.date || tender.tenderPeriod?.startDate || "2025-01-01";
-      const recordYear = new Date(rawDate).getFullYear();
+      // Compute accurate timeline display year
+      const rawDateString = release.date || tender.tenderPeriod?.startDate || "2025-06-01";
+      const recordYear = new Date(rawDateString).getFullYear();
 
       const numericValue = tender.value?.amount || 0;
       const valueDisplay = numericValue > 0 ? `£${numericValue.toLocaleString()}` : "Value inside Document logs";
       const fullTextLower = `${title} ${description}`.toLowerCase();
 
-      // Application Master Filters
+      // Core filter configurations
       if (numericValue > 0 && numericValue < MINIMUM_VALUE_THRESHOLD) return;
       if (CRAP_EXCLUSION_KEYWORDS.some(word => fullTextLower.includes(word))) return; 
       if (!CORE_TECH_KEYWORDS.some(word => fullTextLower.includes(word))) return; 
@@ -62,7 +75,6 @@ export default async function handler(req, res) {
         pathway = "Full-Stack";
       }
 
-      // Format clean search strings to inject directly into the live public search engine
       const portalQueryString = encodeURIComponent(`${buyer} ${title}`.replace(/[^a-zA-Z0-9 ]/g, "").substring(0, 80));
 
       if (release.tag?.includes("tender") || awards.length === 0) {
